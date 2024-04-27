@@ -1,26 +1,14 @@
 # TonSplitter
 
-## Project structure
+This contract can be used to split TON Blockchain into some **specific number of shards**.
 
--   `contracts` - source code of all the smart contracts of the project and their dependencies.
--   `wrappers` - wrapper classes (implementing `Contract` from ton-core) for the contracts, including any [de]serialization primitives and compilation functions.
--   `tests` - tests for the contracts.
--   `scripts` - scripts used by the project, mainly the deployment scripts.
+It's not actually one contract, but two:
+- `Factory` - used to start everything
+- `Spammer`(s) - the workers which spam the network
+
 
 ## How to use
 
-### Build
-
-`npx blueprint build` or `yarn blueprint build`
-
-### Test
-
-`npx blueprint test` or `yarn blueprint test`
-
-### Deploy or run another script
-
-`npx blueprint run` or `yarn blueprint run`
-
-### Add a new contract
-
-`npx blueprint create ContractName` or `yarn blueprint create ContractName`
+- Go to https://1ixi1.github.io/ton-splitter
+- Deploy your own `Factory`
+- Start splitting with method `Send Split` from dropdown menu
