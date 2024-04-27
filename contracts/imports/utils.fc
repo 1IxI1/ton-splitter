@@ -1,0 +1,26 @@
+const SPAM_CONFIG = -137;
+const int op::start_split = 0x7e0f2a10;
+const int op::spammm = 0x53203609;
+const int op::init_spammer = 0x72148b7c;
+
+cell pack_spammer_data(int spammer_id, slice factory, slice counterparty, int end_spam_at) inline {
+    return begin_cell().store_uint(spammer_id, 32)
+                       .store_slice(factory)
+                       .store_slice(counterparty)
+                       .store_uint(end_spam_at, 48)
+            .end_cell();
+}
+
+cell initstate(cell init_data, cell code) inline {
+    return begin_cell().store_uint(0,2).store_dict(code)
+                       .store_dict(init_data).store_uint(0,1)
+            .end_cell();
+}
+
+() check_spam_config() impure inline {
+    cell config = config_param(SPAM_CONFIG);
+    if (config.cell_null?()) {
+        return ();
+    }
+    throw_if(666, config.begin_parse().preload_uint(16) == 1);
+}

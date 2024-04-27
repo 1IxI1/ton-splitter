@@ -1,0 +1,8 @@
+_ spammer_id:uint32
+  factory:Address counterparty:Address
+  end_spam_at:uint48 = SpammerStorage;
+
+_ owner:Address = FactoryStorage;
+
+
+start_split# query_id:uint64 split:uint8 until:uint48 = InternalMsgBody;

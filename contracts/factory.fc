@@ -1,0 +1,114 @@
+#include "imports/stdlib.fc";
+#include "imports/messages.fc";
+#include "imports/utils.fc";
+
+;; factory#_ owner:Address = Storage;
+
+tuple null_tuple(int len) asm """
+DUP
+REPEAT:<{
+   PUSHNULL
+   SWAP
+}>
+TUPLEVAR
+""";
+
+;;forall X -> (tuple, ()) ~tpush(tuple t, X value) asm "TPUSH";
+forall X -> (tuple, ()) ~set(tuple t, int index, X value) asm(t value index) "SETINDEXVAR";
+
+slice null_addr() asm "b{00} PUSHSLICE"; ;; addr_none$00
+const int min_balance = 1000000000; ;; 1 TON
+
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (slice_empty?(in_msg_body)) { ;; ignore empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+
+    if (flags & 1) {
+        return (); ;; bounced
+    }
+    slice ds = get_data().begin_parse();
+    slice owner = ds~load_msg_addr();
+
+    slice sender_address = cs~load_msg_addr();
+    throw_unless(401, equal_slices(sender_address, owner));
+
+    int op = in_msg_body~load_uint(32);
+    int query_id = in_msg_body~load_uint(64);
+    throw_unless(404, op == op::start_split);
+
+    int split = in_msg_body~load_uint(8);
+    int spam_until = in_msg_body~load_uint(48);
+
+    ;; 1 split is 2 shards, 8 splits is 256 shards
+    throw_unless(405, ( 1 <= split ) & ( split <= 8 ) );
+
+    if ( spam_until <= now() ) {
+        spam_until = now() + 86400; ;; by default, spam will last for 24h
+    }
+
+    ;; first we calculate spammer for each chard
+    ;; then, deploy all, setting counterparties in pairs
+    ;; pairs are (1 and 2), (3 and 4), ... - neighboring-shard-spammers
+
+    int shards_count = 1 << split;
+    tuple spammers_by_shard = null_tuple(shards_count);
+
+    int calculated_count = 0;
+    int id = 0;
+    while (calculated_count < shards_count) {
+        cell init_data = pack_spammer_data(id, my_address(), null_addr(), 0);
+        cell spammer_initstate = initstate(init_data, spammer_code());
+        int spammer_addr_hash = cell_hash(spammer_initstate);
+        int shard = spammer_addr_hash >> (256 - split);
+        if ( null?(spammers_by_shard.at(shard)) ) { ;; if still zero in tuple on that shard
+            spammers_by_shard~set(shard, spammer_initstate);
+            calculated_count += 1;
+        }
+        id += 1;
+    }
+
+    int amount_per_spammer = ( my_balance - min_balance ) / shards_count;
+
+    int i = 0;
+    while (i < shards_count) { ;; shards_count - even number
+
+        ;; choose neighbors
+        cell first_spammer_init = spammers_by_shard.at(i);
+        cell second_spammer_init = spammers_by_shard.at(i + 1);
+
+        int first_spammer_addr_hash = cell_hash(first_spammer_init);
+        int second_spammer_addr_hash = cell_hash(second_spammer_init);
+
+        var first_msg = begin_cell().store_msg_flag(msg_flag::non_bounceable)
+                                    .store_addr_wc0(first_spammer_addr_hash)
+                                    .store_coins(amount_per_spammer)
+                                    ;; state init in ref and body not
+                                    .store_uint(4 + 2 + 0, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+                                    .store_ref(first_spammer_init)
+                                    .store_uint(op::init_spammer, 32)
+                                    .store_uint(query_id, 64)
+                                    .store_addr_wc0(second_spammer_addr_hash) ;; counterparty
+                                    .store_uint(spam_until, 48)
+                         .end_cell();
+        send_raw_message(first_msg, REVERT_ON_ERRORS);
+
+        var second_msg = begin_cell().store_msg_flag(msg_flag::non_bounceable)
+                                    .store_addr_wc0(second_spammer_addr_hash)
+                                    .store_coins(amount_per_spammer)
+                                    ;; state init in ref and body not
+                                    .store_uint(4 + 2 + 0, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
+                                    .store_ref(second_spammer_init)
+                                    .store_uint(op::init_spammer, 32)
+                                    .store_uint(query_id, 64)
+                                    .store_addr_wc0(first_spammer_addr_hash) ;; counterparty
+                                    .store_uint(spam_until, 48)
+                         .end_cell();
+        send_raw_message(second_msg, REVERT_ON_ERRORS);
+        i += 2;
+    }
+    return ();
+}
