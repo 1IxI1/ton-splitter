@@ -5,4 +5,8 @@ _ spammer_id:uint32
 _ owner:Address = FactoryStorage;
 
 
-start_split# query_id:uint64 split:uint8 until:uint48 = InternalMsgBody;
+start_split#7e0f2a10 query_id:uint64 split:uint8 until:uint48 = InternalMsgBody;
+
+init_spammer#53203609 query_id:uint64 counterparty:Address end_at:uint48 = InternalMsgBody;
+
+spammm#72148b7c = InternalMsgBody;
